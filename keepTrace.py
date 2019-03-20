@@ -150,92 +150,95 @@ class _Cleaner(object):
             obj_type = type(obj)
             if depth == -1: # We have reached our limit. Just make a basic representation
                 self.seen[obj_id] = result = repr(obj)
-                return result
-
-            if obj_type == types.TracebackType:
-                trace = obj
-                last_trace = {}
-                for _ in xrange(limit): # Loop here for less recursive calls to clean
-                    if not trace:
-                        break
-                    trace_id = id(trace)
-                    if trace_id in self.seen:
-                        last_trace["tb_next"] = self.seen[trace_id]
-                        break
-                    dct = {"_repr": repr(trace), "_mock": _from_import("types", "TracebackType")}
-                    self.seen[trace_id] = last_trace["tb_next"] = _call(_mock, dct) # Preload to stop recursive cycles
-                    dct.update((at, getattr(trace, at)) for at in dir(trace) if at.startswith("tb_"))
-                    dct["tb_frame"] = self.clean(trace.tb_frame, depth+1)
-                    trace = trace.tb_next
-                    last_trace = dct
-                last_trace["tb_next"] = None
-                return self.seen[obj_id]
-
-            if obj_type == types.FrameType:
-                frame = obj
-                last_frame = {}
-                while frame: # Loop here for less recursive calls to clean
-                    frame_id = id(frame)
-                    if frame_id in self.seen:
-                        last_frame["f_back"] = self.seen[frame_id]
-                        break
-                    dct = {"_repr": repr(frame), "_mock": _from_import("types", "FrameType")}
-                    self.seen[frame_id] = last_frame["f_back"] = _call(_mock, dct) # Preload to stop recursive cycles
-                    dct.update((at, getattr(frame, at)) for at in dir(frame) if at.startswith("f_"))
-                    dct["f_builtins"] = _from_import("types", "__builtins__") # Load builtins at unpickle time
-                    dct["f_globals"] = {k: self.clean(v, depth) for k, v in frame.f_globals.items() if not k.startswith("__")}
-                    dct["f_locals"] = {k: self.clean(v, depth) for k,v in frame.f_locals.items()}
-                    dct["f_code"] = self.clean(frame.f_code, depth+1)
-                    frame = frame.f_back
-                    last_frame = dct
-                return self.seen[obj_id]
-
-            if obj_type == types.CodeType:
-                dct = {"_repr": repr(obj), "_mock": _from_import("types", "CodeType")}
-                self.seen[obj_id] = result = _call(_mock, dct) # Preload to stop recursive cycles
-                dct.update((at, getattr(obj, at)) for at in dir(obj) if at.startswith("co_"))
-                dct["co_consts"] = self.clean(obj.co_consts, depth+2)
-                dct["co_filename"] = os.path.abspath(obj.co_filename)
-                return result
-
-            if obj_type in SEQ_TYPES:
-                self.seen[obj_id] = result = obj_type(self.clean(o, depth) for o in obj)
-                return result
-
-            if obj_type == dict:
-                self.seen[obj_id] = result = {self.clean(k, depth): self.clean(v, depth) for k, v in obj.items()}
-                return result
-
-            if self.pickler:
+            elif obj_type in TRACEBACK_TYPES:
+                result = self.clean_traceback_types(obj, depth)
+            elif self.pickler:
                 try: # Try to see if we can just pickle straight up
                     self.pickler.loads(self.pickler.dumps(obj))
                     self.seen[obj_id] = result = obj
                     return result
                 except Exception: # Otherwise fallback to mocks/stubs
-                    pass
-
-            if obj_type in FUNC_TYPES:
-                self.seen[obj_id] = result = _stub
-                return result
-
-            if obj_type in STD_TYPES:
-                self.seen[obj_id] = result = obj
-                return result
-
-            if obj_type == types.ModuleType:
-                if not hasattr(obj, "__file__") or obj.__file__.startswith(os.path.dirname(types.__file__)):
-                    self.seen[obj_id] = result = _import(obj.__name__) # Standard library stuff. Safe to import this.
-                else:
-                    self.seen[obj_id] = result = repr(obj) # Otherwise sanitize it!
-                return result
-
-            try: # Create a mock object as a fake representation of the original for inspection
-                dct ={"_repr": repr(obj), "_mock": object}
-                self.seen[obj_id] = result = _call(_mock, dct) # Preload to stop recursive cycles
-                dct.update((at, self.clean(getattr(obj, at), depth)) for at in dir(obj) if not at.startswith("__"))
-            except Exception as err: # Failing that, just get the representation of the thing...
-                self.seen[obj_id] = result = repr(obj)
+                    result = self.clean_fallback(obj, depth)
+            else:
+                result = self.clean_fallback(obj, depth)
             return result
         except Exception as err:
             self.seen[obj_id] = result = "Failed to serialize object: %s" % err
             return result
+
+    def clean_traceback_types(self, obj, depth):
+        """ Clean traceback related objects in a special way """
+        obj_id = id(obj)
+        obj_type = type(obj)
+        if obj_type == types.TracebackType:
+            trace = obj
+            last_trace = {}
+            for _ in xrange(self.limit): # Loop here for less recursive calls to clean
+                if not trace:
+                    break
+                trace_id = id(trace)
+                if trace_id in self.seen:
+                    last_trace["tb_next"] = self.seen[trace_id]
+                    break
+                dct = {"_repr": repr(trace), "_mock": _from_import("types", "TracebackType")}
+                self.seen[trace_id] = last_trace["tb_next"] = _call(_mock, dct) # Preload to stop recursive cycles
+                dct.update((at, getattr(trace, at)) for at in dir(trace) if at.startswith("tb_"))
+                dct["tb_frame"] = self.clean(trace.tb_frame, depth+1)
+                trace = trace.tb_next
+                last_trace = dct
+            last_trace["tb_next"] = None
+            result = self.seen[obj_id]
+
+        elif obj_type == types.FrameType:
+            frame = obj
+            last_frame = {}
+            while frame: # Loop here for less recursive calls to clean
+                frame_id = id(frame)
+                if frame_id in self.seen:
+                    last_frame["f_back"] = self.seen[frame_id]
+                    break
+                dct = {"_repr": repr(frame), "_mock": _from_import("types", "FrameType")}
+                self.seen[frame_id] = last_frame["f_back"] = _call(_mock, dct) # Preload to stop recursive cycles
+                dct.update((at, getattr(frame, at)) for at in dir(frame) if at.startswith("f_"))
+                dct["f_builtins"] = _from_import("types", "__builtins__") # Load builtins at unpickle time
+                dct["f_globals"] = {k: self.clean(v, depth) for k, v in frame.f_globals.items() if not k.startswith("__")}
+                dct["f_locals"] = {k: self.clean(v, depth) for k,v in frame.f_locals.items()}
+                dct["f_code"] = self.clean(frame.f_code, depth+1)
+                frame = frame.f_back
+                last_frame = dct
+            result = self.seen[obj_id]
+
+        else: # obj_type == types.CodeType:
+            dct = {"_repr": repr(obj), "_mock": _from_import("types", "CodeType")}
+            self.seen[obj_id] = result = _call(_mock, dct) # Preload to stop recursive cycles
+            dct.update((at, getattr(obj, at)) for at in dir(obj) if at.startswith("co_"))
+            dct["co_consts"] = self.clean(obj.co_consts, depth+2)
+            dct["co_filename"] = os.path.abspath(obj.co_filename)
+        return result
+
+    def clean_fallback(self, obj, depth):
+        """ Fallback to mocking and stubbing everything, for representation purpose only. """
+        obj_id = id(obj)
+        obj_type = type(obj)
+        if obj_type == dict:
+            self.seen[obj_id] = result = {self.clean(k, depth): self.clean(v, depth) for k, v in obj.items()}
+        elif obj_type in SEQ_TYPES:
+            self.seen[obj_id] = result = obj_type(self.clean(o, depth) for o in obj)
+        elif obj_type in FUNC_TYPES:
+            self.seen[obj_id] = result = _stub
+        elif obj_type in STD_TYPES:
+            self.seen[obj_id] = result = obj
+        elif obj_type == types.ModuleType:
+            # TODO: This check is not true!
+            if not hasattr(obj, "__file__") or obj.__file__.startswith(os.path.dirname(types.__file__)):
+                self.seen[obj_id] = result = _import(obj.__name__) # Standard library stuff. Safe to import this.
+            else:
+                self.seen[obj_id] = result = repr(obj) # Otherwise sanitize it!
+        else:
+            try: # Create a mock object as a fake representation of the original for inspection
+                dct ={"_repr": repr(obj), "_mock": object}
+                self.seen[obj_id] = result = _call(_mock, dct) # Preload to stop recursive cycles
+                dct.update((at, self.clean(getattr(obj, at), depth)) for at in dir(obj) if not at.startswith("__"))
+            except Exception: # Failing that, just get the representation of the thing...
+                self.seen[obj_id] = result = repr(obj)
+        return result
