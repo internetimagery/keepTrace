@@ -43,21 +43,28 @@ TRACEBACK_TYPES = (types.TracebackType, types.FrameType, types.CodeType)
 def init(pickler=None, depth=3, include_source=True, limit=None): # Prepare traceback pickle functionality
     """
         Prep traceback for pickling. Run this to allow pickling of traceback types.
-        pickler :
-            * If set to None. tracebacks are pickled in conservative mode. Classes are mocked, and objects replaced
-              with representations, such that the traceback can be inspected regardless of environment.
-            * If set to a pickler callable, objects will be pickled by the pickler, and only if it fails will they be mocked.
-              This has the advantage of including real functional objects in the traceback,
-              at the cost of requiring the original environment to unpickle.
-        depth   :
-            * How far to fan out from the traceback before returning representations of everything.
-              The higher the value, the more you can inspect at the cost of extra pickle size.
-              A value of -1 means no limit. Fan out forever and grab everything.
-        include_source:
-            * Include source code in pickle, and reconstruct on unpickle for debugging. On by default. Recommended, though
-              will eat up extra space if there are numerous traceback dumps.
-        limit   :
-            * Reduce the depth traversed in the traceback (different from depth setting above which handles depth from traceback).
+
+        Args:
+            pickler (Callable):
+                * If set to None. tracebacks are pickled in "conservative" mode. Classes are mocked, and objects replaced
+                  with representations, such that the traceback can be inspected regardless of environment.
+                * If set to a pickler callable (ie pickle.dumps / dill.dumps etc), objects will be pickled by the pickler,
+                  and only if it fails will they be mocked.
+                  This has the advantage of including real functional objects in the traceback,
+                  at the cost of requiring the original environment to unpickle.
+            depth (int):
+                * How far to fan out from the traceback before returning representations of everything.
+                  The higher the value, the more you can inspect at the cost of extra pickle size.
+                  A value of -1 means no limit. Fan out forever and grab everything.
+            include_source (bool):
+                * Include source code in pickle, and reconstruct on unpickle for debugging. On by default.
+                  Recommended, though it will eat up extra space if there are numerous traceback dumps.
+            limit (int):
+                * Reduce the depth traversed in the traceback (different from depth setting above
+                  which handles depth from traceback). By default this is set high enough to sit just
+                  below the recursion limit.
+        Returns:
+            None:
     """
     def prepare_traceback(trace):
         clean_trace = _Cleaner(pickler, limit).clean(trace, depth) # Make traceback pickle friendly
