@@ -60,7 +60,7 @@ original environment, but all objects will be replaced by mocks and stubs.
 
 ``` python
 import keepTrace, pickle
-keepTrace.init(pickler=pickle)
+keepTrace.init(pickler=pickle.dumps)
 ```
 
 ### 3) Depth
@@ -95,7 +95,7 @@ You will however need to be able to provide the same environment as the original
 >
 > ``` python
 > import keepTrace, dill
-> keepTrace.init(pickler=dill, depth=-1)
+> keepTrace.init(pickler=dill.dumps, depth=-1)
 > ```
 
 ### 4) Include Source
