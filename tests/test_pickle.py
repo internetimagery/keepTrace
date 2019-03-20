@@ -20,6 +20,10 @@ def recurse(num):
 def syntax():
     eval("for this is")
 
+class BadClass(object):
+    def __reduce__(self):
+        return abc, (123,)
+
 class TestPickle(unittest.TestCase):
 
     def assertTrace(self, exc):
@@ -72,7 +76,7 @@ class TestPickle(unittest.TestCase):
         except Exception:
             pickle.loads(pickle.dumps(sys.exc_info()))
 
-    def test__fake_recursion(self):
+    def test_fake_recursion(self):
         keepTrace.init()
         try:
             recurse(sys.getrecursionlimit()/2)
@@ -86,6 +90,13 @@ class TestPickle(unittest.TestCase):
         except SyntaxError:
             self.assertTrace(sys.exc_info())
 
+    def test_bad_object(self):
+        keepTrace.init(pickler=pickle)
+        try:
+            bc = BadClass()
+            error()
+        except Exception:
+            self.assertTrace(sys.exc_info())
 
 
 if __name__ == '__main__':
