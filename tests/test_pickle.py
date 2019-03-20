@@ -10,6 +10,11 @@ except ImportError:
 
 import keepTrace
 
+root = __file__
+if root[-1] == "c": # pyc file
+    root = root[:-1]
+abs_root = os.path.abspath(root)
+
 def error():
     raise RuntimeError()
 
@@ -20,16 +25,23 @@ def recurse(num):
 def syntax():
     eval("for this is")
 
-class BadClass(object):
+def bad_restore(data):
+    raise RuntimeError("Oh no!")
+
+class BadBefore(object):
     def __reduce__(self):
-        return abc, (123,)
+        return I_do_not_exist, (some_missing_data, )
+
+class BadAfter(object):
+    def __reduce__(self):
+        return bad_restore, (123,)
 
 class TestPickle(unittest.TestCase):
 
     def assertTrace(self, exc):
         data = pickle.dumps(exc)
         restored = pickle.loads(data)
-        source_trace = "".join(traceback.format_exception(*exc)).replace(__file__, os.path.abspath(__file__))
+        source_trace = "".join(traceback.format_exception(*exc)).replace(root, abs_root)
         expect_trace = "".join(traceback.format_exception(*restored))
         self.assertEqual(source_trace, expect_trace)
 
@@ -48,7 +60,7 @@ class TestPickle(unittest.TestCase):
             self.assertTrace(sys.exc_info())
 
     def test_roundtrip_pickler(self):
-        keepTrace.init(pickler=pickle)
+        keepTrace.init(pickler=pickle.dumps)
         try:
             error()
         except RuntimeError:
@@ -91,9 +103,10 @@ class TestPickle(unittest.TestCase):
             self.assertTrace(sys.exc_info())
 
     def test_bad_object(self):
-        keepTrace.init(pickler=pickle)
+        keepTrace.init(pickler=pickle.dumps)
         try:
-            bc = BadClass()
+            bb = BadBefore()
+            ba = BadAfter()
             error()
         except Exception:
             self.assertTrace(sys.exc_info())

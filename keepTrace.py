@@ -46,9 +46,9 @@ def init(pickler=None, depth=3, include_source=True, limit=None): # Prepare trac
         pickler :
             * If set to None. tracebacks are pickled in conservative mode. Classes are mocked, and objects replaced
               with representations, such that the traceback can be inspected regardless of environment.
-            * If set to a pickler, objects will first be tested to see if they can be pickled by the pickler,
-              and if so, their original form will remain untouched. This has the advantage of including real functional
-              objects in the traceback, at the cost of requiring the original environment to unpickle.
+            * If set to a pickler callable, objects will be pickled by the pickler, and only if it fails will they be mocked.
+              This has the advantage of including real functional objects in the traceback,
+              at the cost of requiring the original environment to unpickle.
         depth   :
             * How far to fan out from the traceback before returning representations of everything.
               The higher the value, the more you can inspect at the cost of extra pickle size.
@@ -132,6 +132,15 @@ def _stub(*_, **__):
     """ Replacement for sanitized functions """
     raise UserWarning("This is a stub function. The original was not serialized.")
 
+@_savePickle
+def _safe_restore(data, rep):
+    """ Safely restore pickled data, resorting to representation on fail """
+    import pickle
+    try:
+        return pickle.loads(data)
+    except Exception:
+        return rep
+
 class _Cleaner(object):
     """ Clean up pickleable objects """
     def __init__(self, pickler=None, limit=None):
@@ -154,9 +163,7 @@ class _Cleaner(object):
                 result = self.clean_traceback_types(obj, depth)
             elif self.pickler:
                 try: # Try to see if we can just pickle straight up
-                    self.pickler.loads(self.pickler.dumps(obj))
-                    self.seen[obj_id] = result = obj
-                    return result
+                    self.seen[obj_id] = result = _call(_safe_restore, self.pickler(obj), repr(obj))
                 except Exception: # Otherwise fallback to mocks/stubs
                     result = self.clean_fallback(obj, depth)
             else:
