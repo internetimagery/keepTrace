@@ -71,8 +71,6 @@ Objects at the edge of the pickle depth will be replaced by their representation
 
 Use a shallow depth (low number) to keep pickles lighter. Use a higher depth if you wish to record and inspect further and / or wish to have more truly functional objects (pickled objects with representations inside them will fail to work for obvious reasons).
 
-Setting depth to 0 will provide only a representation of the traceback. Not overly useful and not debuggable.
-
 Setting depth to -1 will make depth infinite.
 
 ``` python
