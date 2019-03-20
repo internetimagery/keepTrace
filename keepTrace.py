@@ -217,6 +217,7 @@ class _Cleaner(object):
                 dct["f_builtins"] = _from_import("types", "__builtins__") # Load builtins at unpickle time
                 dct["f_globals"] = {k: self.clean(v, depth) for k, v in frame.f_globals.items() if not k.startswith("__")}
                 dct["f_locals"] = {k: self.clean(v, depth) for k,v in frame.f_locals.items()}
+                dct["f_trace"] = self.clean(frame.f_trace, depth)
                 dct["f_code"] = self.clean(frame.f_code, depth+1)
                 frame = frame.f_back
                 last_frame = dct
