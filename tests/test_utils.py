@@ -84,6 +84,22 @@ class TestParse(unittest.TestCase):
         except RuntimeError:
             self.assertParse()
 
+    def test_attribute(self):
+        try: # This line resembles "Exception: value" when traceback is stripped of indentation
+            {
+                NameError: self.not_at_all_here
+            }
+        except AttributeError:
+            self.assertParse()
+
+    def test_zerodiv(self):
+        try: # This line resembles "Exception: value" when traceback is stripped of indentation
+            {
+                NameError: 0 / 0
+            }
+        except ZeroDivisionError:
+            self.assertParse()
+
 
 if __name__ == '__main__':
     unittest.main()

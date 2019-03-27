@@ -107,7 +107,7 @@ def parse_tracebacks(reader):
                         peek = next(reader) # Peek at the next line
                         reader = (b for a in ([peek], reader) for b in a)
                         peek_err = reg_err.match(peek[offset:])
-                        if peek_err and peek_err.group("error") == "NameError": # False positive!
+                        if peek_err and peek_err.group("error") in builtins.__dict__: # One liner errors have to be builtins
                             continue
                         if reg_file.match(peek[offset:]): # If next line includes File format, we're still going.
                             continue
