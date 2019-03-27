@@ -139,3 +139,24 @@ Finally, an original message from pydump. The inspiration and initially the orig
 > exception caught, I write a dump file and I can debug each issue on
 > my own time, on my own box, even if I don't have the source, since
 > the relevant source is stored in the dump file.
+
+---
+
+# Utilities
+
+You're still reading? Awesome. Have some goodies!! :)
+
+### utils.parse_tracebacks
+
+This is a utiltiy function that can assist in retrieving traceback objects from python logs.
+
+These objects can be used anywhere tracebacks are, and are also debuggable, which helps greatly with context. There are no variables however so inspection is highly limited.
+eg:
+
+```python
+from traceback import print_exception
+from keepTrace.utils import parse_tracebacks
+with open(path_to_log) as f:
+    for error in parse_tracebacks(f):
+        print_exception(*error)
+```

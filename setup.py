@@ -5,10 +5,14 @@ except ImportError:
 import os.path
 
 setup(
+<<<<<<< HEAD
     version = "1.0.4",
+=======
+    version = "1.1.3",
+>>>>>>> develop
     name = "keepTrace",
     author = "Jason Dixon",
-    py_modules = ["keepTrace"],
+    packages = ["keepTrace"],
     author_email = "jason.dixon.email@gmail.com",
     long_description_content_type = "text/markdown",
     url = "https://github.com/internetimagery/keepTrace",
