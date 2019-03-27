@@ -52,6 +52,22 @@ class TestParse(unittest.TestCase):
         except Exception:
             self.assertParse()
 
+    def test_remote(self):
+        import threading
+        try:
+            raise threading.ThreadError("gah!")
+        except threading.ThreadError:
+            self.assertParse()
+
+    def test_scoped(self):
+        if sys.version_info[0] == 3:
+            return # Skip python3 for now. More complex mocking needed.
+        class ScopedErr(Exception): pass
+        try:
+            raise ScopedErr("custom")
+        except ScopedErr:
+            self.assertParse()
+
     # Now for some edge cases!!
 
     def test_variable(self):

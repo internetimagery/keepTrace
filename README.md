@@ -149,9 +149,8 @@ You're still reading? Awesome. Have some goodies!! :)
 ### utils.parse_tracebacks
 
 This is a utiltiy function that can assist in retrieving traceback objects from python logs.
-The parsed traceback is guaranteed to format the same as the live traceback, or the unpickled traceback.
-Local and global variables not included of course.
-They are also debuggable, which helps greatly with context. There are no variables however so inspection is highly limited.
+
+These objects can be used anywhere tracebacks are, and are also debuggable, which helps greatly with context. There are no variables however so inspection is highly limited.
 eg:
 
 ```python

@@ -50,7 +50,7 @@ def parse_tracebacks(reader):
     # The lines we care about
     # TODO: Put all into one regex? Faster?
     reg_file = re.compile(r"(  )?File \"(?P<filename>[^\"]+)\", line (?P<lineno>\d+)(, in (?P<name>.+))?")
-    reg_err = re.compile(r"(?P<error>[\w\.]+)(: (?P<value>.+))?$")
+    reg_err = re.compile(r"(?P<error>[<>\w\.]+)(: (?P<value>.+))?$")
     reg_repeat = re.compile(r"(  )?\[Previous line repeated (?P<repeats>\d+) more times\]")
     # TODO: support recursion error traceback python3
     frames = offset = syntax_pack = None # Special treatment for syntax errors
@@ -122,11 +122,24 @@ def parse_tracebacks(reader):
                             tb_frame = frame,
                             tb_lineno = frame.f_lineno,
                             tb_next = tb[-1] if tb else None))
-                    # Format and assign errors
+
+                    # Find and assign errors
                     error = err_line.group("error")
                     type_ = builtins.__dict__.get(error)
+                    if not type_:
+                        try:
+                            module, name = error.rsplit(".", 1)
+                            type_ = getattr(__import__(module, fromlist=[""]), name, None)
+                        except (ValueError, ImportError):
+                            pass
+
                     message = (err_line.group("value") or "").strip()
                     value = (type_ or Exception)(message)
+
+                    # TODO: Python 3 wants value type to include these. We need to mock these for
+                    # error types we cannot load
+                    # stype = self.exc_type.__qualname__
+                    # smod = self.exc_type.__module__
 
                     if syntax_pack: # Special care for SyntaxErrors
                         # Python 2
