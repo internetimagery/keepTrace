@@ -8,7 +8,7 @@ setup(
     version = "1.0.3",
     name = "keepTrace",
     author = "Jason Dixon",
-    py_modules = ["keepTrace"],
+    packages = ["keepTrace"],
     author_email = "jason.dixon.email@gmail.com",
     long_description_content_type = "text/markdown",
     url = "https://github.com/internetimagery/keepTrace",
