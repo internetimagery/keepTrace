@@ -23,7 +23,10 @@
 import re
 import types
 import logging
-import __builtin__
+try:
+    import __builtin__ as builtins
+except ImportError:
+    import builtins
 
 LOG = logging.getLogger(__name__)
 
@@ -48,6 +51,7 @@ def parse_tracebacks(reader):
     # TODO: Put all into one regex? Faster?
     reg_file = re.compile(r"(  )?File \"(?P<filename>[^\"]+)\", line (?P<lineno>\d+)(, in (?P<name>.+))?")
     reg_err = re.compile(r"(?P<error>[\w\.]+)(: (?P<value>.+))?$")
+    reg_repeat = re.compile(r"(  )?\[Previous line repeated (?P<repeats>\d+) more times\]")
     # TODO: support recursion error traceback python3
     frames = offset = syntax_pack = None # Special treatment for syntax errors
     while True: # Allow modification of reader on the fly. Regular "for var in reader" doesn't allow that.
@@ -59,6 +63,7 @@ def parse_tracebacks(reader):
             line = line[offset:] # Keep all lines at the same indent
             err_line = reg_err.match(line)
             file_line = reg_file.match(line)
+            repeat_line = reg_repeat.match(line)
             if file_line: # File "path", line 123, in name
                 if not file_line.group("name"): # We have a SyntaxError
                     # msg, (filename, lineno, offset, badline) = value.args
@@ -87,6 +92,14 @@ def parse_tracebacks(reader):
                 if frames:
                     frames[-1].f_back = frame
                 frames.append(frame)
+
+            elif repeat_line:
+                # Got a repeat concatenated message. Unravel it!
+                for _ in range(int(repeat_line.group("repeats")) + 1):
+                    frame = mock(**frames[-1].__dict__) # Copy frame
+                    frames[-1].f_back = frame
+                    frames.append(frame)
+
             elif err_line:
                 if frames:
                     # Time to catch some false positive edge cases.
@@ -111,12 +124,17 @@ def parse_tracebacks(reader):
                             tb_next = tb[-1] if tb else None))
                     # Format and assign errors
                     error = err_line.group("error")
-                    type_ = __builtin__.__dict__.get(error)
-                    value = (err_line.group("value") or "").strip()
-                    value = (type_ or Exception)(value)
-                    if syntax_pack:
+                    type_ = builtins.__dict__.get(error)
+                    message = (err_line.group("value") or "").strip()
+                    value = (type_ or Exception)(message)
+
+                    if syntax_pack: # Special care for SyntaxErrors
+                        # Python 2
                         value.message = ""
                         value.args += (syntax_pack,)
+                        # Python 3
+                        value.msg = message
+                        value.filename, value.lineno, value.offset, value.text = syntax_pack
 
                     yield (type_ or error, value, tb[-1])
                 frames = offset = syntax_pack = None
