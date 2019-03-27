@@ -17,16 +17,16 @@ def error(msg=""):
 
 class TestParse(unittest.TestCase):
 
-    def testParse(self):
+    def assertParse(self):
         real_error = traceback.format_exc()
-        parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(iter(real_error.split("\n"))))))
+        parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(iter(real_error.split("\n"))))[0]))
         self.assertEqual(real_error, parsed_error)
 
     def test_simple(self):
         try:
             stack()
         except RuntimeError:
-            self.testParse()
+            self.assertParse()
 
 
 if __name__ == '__main__':

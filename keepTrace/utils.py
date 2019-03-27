@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 import re
+import types
 
 def parse_tracebacks(reader):
     """
@@ -34,56 +35,52 @@ def parse_tracebacks(reader):
     Returns:
         types.TracebackType: Actually a mock traceback. Still usable in traceback formatting and in debuggers.
     """
-    # Establish the lines we care about
-    reg_file = compile(r"(  )?File \"(?P<path>[^\"]+)\", line (?P<line>\d+), in (?P<name>.+)")
-
-
+    # Mock object to become our traceback objects
+    mock = type("mock", (object,), {
+        "__init__":  lambda s, **d: s.__dict__.update(d),
+        "__class__": property(lambda s: s._class),
+        "__repr__": lambda s: s._repr})
+    # The lines we care about
+    # TODO: Put all into one regex? Faster?
+    reg_file = re.compile(r"(  )?File \"(?P<path>[^\"]+)\", line (?P<line>\d+), in (?P<name>.+)")
+    reg_err = re.compile(r"(?P<error>[\w\.]+)(: (?P<value>.+))?$")
     # TODO: support recursion error traceback python3
-    trace = None
+    frames = offset = None
     for line in reader:
-        if trace is not None:
-            file_line = file_line_reg.match(line)
-            if file_line:
-                trace.append(Frame(
-                    f_back=trace[-1] if trace else None,
-                    f_lineno = int(file_line.group(2)),
-                    f_code = Code(
-                        co_name = file_line.group(3).strip(),
-                        co_filename = file_line.group(1).strip()
+        header = line.find("Traceback (most recent call last):")
+        if header != -1: # We have started a traceback.
+            frames, offset = [], header
+        elif frames is not None: # We are currently handling a traceback
+            line = line[offset:] # Keep all lines at the same indent
+            err_line = reg_err.match(line)
+            file_line = reg_file.match(line)
+            if file_line: # File "path", line 123, in name
+                frame = mock(
+                    _repr = "<parsed Frame>",
+                    _class = types.FrameType,
+                    f_back = None,
+                    f_lineno = int(file_line.group("line")),
+                    f_code = mock(
+                        _repr = "<parsed Code>",
+                        _class = types.CodeType,
+                        co_name = file_line.group("name").strip(),
+                        co_filename = file_line.group("path").strip()
                     ),
-                    f_builtins = {}, f_locals = {}, f_globals = {}
-                ))
-            elif line[0] == " ":
-                continue
-            else:
-                tb = []
-                for frame in reversed(trace):
-                    tb.append(Traceback(
-                        tb_frame = frame,
-                        tb_lineno = frame.f_lineno,
-                        tb_next = tb[-1] if tb else None
-                    ))
-                message = line.split(":",1)
-                if len(message) == 2:
-                    yield (message[0], message[1].strip(), tb[-1])
-                trace = None
-        elif line.startswith("Traceback (most recent call last):"):
-            trace = []
-
-if __name__ == '__main__':
-    import traceback
-    from pprint import pprint
-
-    def error():
-        raise RuntimeError("what an error that was")
-    def warm():
-        error()
-    def cool():
-        warm()
-
-    try:
-        cool()
-    except RuntimeError:
-        tbs = list(tracebacks(traceback.format_exc().split("\n")))
-        traceback.print_exception(*tbs[0])
-        assert traceback.format_exc() == "".join(traceback.format_exception(*tbs[0]))
+                    f_builtins = {}, f_locals = {}, f_globals = {})
+                if frames:
+                    frames[-1].f_back = frame
+                frames.append(frame)
+            elif err_line:
+                error = err_line.group("error")
+                value = (err_line.group("value") or "").strip()
+                if frames:
+                    tb = []
+                    for frame in reversed(frames):
+                        tb.append(mock(
+                            _repr = "<parsed Traceback>",
+                            _class = types.TracebackType,
+                            tb_frame = frame,
+                            tb_lineno = frame.f_lineno,
+                            tb_next = tb[-1] if tb else None))
+                    yield (error, value, tb[-1])
+                frames = None
