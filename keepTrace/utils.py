@@ -22,6 +22,10 @@
 
 import re
 import types
+import logging
+import __builtin__
+
+LOG = logging.getLogger(__name__)
 
 def parse_tracebacks(reader):
     """
@@ -42,10 +46,10 @@ def parse_tracebacks(reader):
         "__repr__": lambda s: s._repr})
     # The lines we care about
     # TODO: Put all into one regex? Faster?
-    reg_file = re.compile(r"(  )?File \"(?P<path>[^\"]+)\", line (?P<line>\d+), in (?P<name>.+)")
+    reg_file = re.compile(r"(  )?File \"(?P<filename>[^\"]+)\", line (?P<lineno>\d+)(, in (?P<name>.+))?")
     reg_err = re.compile(r"(?P<error>[\w\.]+)(: (?P<value>.+))?$")
     # TODO: support recursion error traceback python3
-    frames = offset = None
+    frames = offset = syntax_pack = None # Special treatment for syntax errors
     for line in reader:
         header = line.find("Traceback (most recent call last):")
         if header != -1: # We have started a traceback.
@@ -55,26 +59,36 @@ def parse_tracebacks(reader):
             err_line = reg_err.match(line)
             file_line = reg_file.match(line)
             if file_line: # File "path", line 123, in name
+                if not file_line.group("name"): # We have a SyntaxError
+                    # msg, (filename, lineno, offset, badline) = value.args
+                    bad_line = next(reader)[offset:]
+                    bad_offset = next(reader)[offset:].find("^") + 1
+                    if bad_offset == 1: # If carret has been stripped of whitespace, offset information is lost (but it could be legit still)
+                        LOG.warning("SyntaxError traceback may have lost its offset information.")
+                    syntax_pack = (
+                        file_line.group("filename"),
+                        int(file_line.group("lineno")),
+                        bad_offset, bad_line)
+                    continue
+
                 frame = mock(
                     _repr = "<parsed Frame>",
                     _class = types.FrameType,
                     f_back = None,
-                    f_lineno = int(file_line.group("line")),
+                    f_lineno = int(file_line.group("lineno")),
                     f_code = mock(
                         _repr = "<parsed Code>",
                         _class = types.CodeType,
                         co_name = file_line.group("name").strip(),
-                        co_filename = file_line.group("path").strip()
+                        co_filename = file_line.group("filename").strip()
                     ),
                     f_builtins = {}, f_locals = {}, f_globals = {})
                 if frames:
                     frames[-1].f_back = frame
                 frames.append(frame)
             elif err_line:
-                error = err_line.group("error")
-                value = (err_line.group("value") or "").strip()
                 if frames:
-                    tb = []
+                    tb = [] # Format traceback
                     for frame in reversed(frames):
                         tb.append(mock(
                             _repr = "<parsed Traceback>",
@@ -82,5 +96,14 @@ def parse_tracebacks(reader):
                             tb_frame = frame,
                             tb_lineno = frame.f_lineno,
                             tb_next = tb[-1] if tb else None))
-                    yield (error, value, tb[-1])
-                frames = None
+                    # Format and assign errors
+                    error = err_line.group("error")
+                    type_ = __builtin__.__dict__.get(error)
+                    value = (err_line.group("value") or "").strip()
+                    value = (type_ or Exception)(value)
+                    if syntax_pack:
+                        value.message = ""
+                        value.args += (syntax_pack,)
+
+                    yield (type_ or error, value, tb[-1])
+                frames = offset = syntax_pack = None

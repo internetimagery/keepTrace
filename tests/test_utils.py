@@ -1,4 +1,5 @@
 
+import sys
 import unittest
 import traceback
 
@@ -14,14 +15,22 @@ def here():
     error()
 def error(msg=""):
     raise RuntimeError(msg)
+def recurse():
+    recurse()
+def syntax():
+    exec("error in")
 
 class TestParse(unittest.TestCase):
 
     def assertParse(self):
         real_error = traceback.format_exc()
-        for mangled in [ # Mangle traceback in common ways
+        for i, mangled in enumerate([ # Mangle traceback in common ways
+            (l for l in real_error.split("\n")), # Normal!
             ("# "+l for l in real_error.split("\n")), # Commented traceback
-            (l.strip() for l in real_error.split("\n"))]: # Indent stripped traceback
+            (l.strip() for l in real_error.split("\n")), # Indent stripped traceback
+            ]):
+            if sys.exc_info()[0] == SyntaxError and i == 2:
+                continue # Stripped syntax error is impossible parse, as information is lost in whitespace
             parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(mangled))[0]))
             self.assertEqual(real_error, parsed_error)
 
@@ -29,6 +38,18 @@ class TestParse(unittest.TestCase):
         try:
             stack()
         except RuntimeError:
+            self.assertParse()
+
+    def test_recurse(self):
+        try:
+            recurse()
+        except Exception:
+            self.assertParse()
+
+    def test_syntax(self):
+        try:
+            syntax()
+        except Exception:
             self.assertParse()
 
 
