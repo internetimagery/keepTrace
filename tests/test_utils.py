@@ -29,9 +29,9 @@ class TestParse(unittest.TestCase):
             ("# "+l for l in real_error.split("\n")), # Commented traceback
             (l.strip() for l in real_error.split("\n")), # Indent stripped traceback
             ]):
-            if sys.exc_info()[0] == SyntaxError and i == 2:
-                continue # Stripped syntax error is impossible parse, as information is lost in whitespace
             parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(mangled))[0])).strip()
+            if sys.exc_info()[0] == SyntaxError and i == 2:
+                continue # Stripped syntax error is impossible to fully parse, as information is lost from carret whitespace
             self.assertEqual(real_error, parsed_error)
 
     def test_simple(self):
