@@ -23,7 +23,7 @@ def syntax():
 class TestParse(unittest.TestCase):
 
     def assertParse(self):
-        real_error = traceback.format_exc()
+        real_error = traceback.format_exc().strip()
         for i, mangled in enumerate([ # Mangle traceback in common ways
             (l for l in real_error.split("\n")), # Normal!
             ("# "+l for l in real_error.split("\n")), # Commented traceback
@@ -31,7 +31,7 @@ class TestParse(unittest.TestCase):
             ]):
             if sys.exc_info()[0] == SyntaxError and i == 2:
                 continue # Stripped syntax error is impossible parse, as information is lost in whitespace
-            parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(mangled))[0]))
+            parsed_error = "".join(traceback.format_exception(*list(parse_tracebacks(mangled))[0])).strip()
             self.assertEqual(real_error, parsed_error)
 
     def test_simple(self):
@@ -50,6 +50,22 @@ class TestParse(unittest.TestCase):
         try:
             syntax()
         except Exception:
+            self.assertParse()
+
+    # Now for some edge cases!!
+
+    def test_variable(self):
+        try: # This line resembles "Exception" when traceback is stripped of indentation
+            i_do_not_exist
+        except NameError:
+            self.assertParse()
+
+    def test_dict(self):
+        try: # This line resembles "Exception: value" when traceback is stripped of indentation
+            {
+                NameError: error()
+            }
+        except RuntimeError:
             self.assertParse()
 
 

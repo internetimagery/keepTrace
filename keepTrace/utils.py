@@ -50,7 +50,8 @@ def parse_tracebacks(reader):
     reg_err = re.compile(r"(?P<error>[\w\.]+)(: (?P<value>.+))?$")
     # TODO: support recursion error traceback python3
     frames = offset = syntax_pack = None # Special treatment for syntax errors
-    for line in reader:
+    while True: # Allow modification of reader on the fly. Regular "for var in reader" doesn't allow that.
+        line = next(reader)
         header = line.find("Traceback (most recent call last):")
         if header != -1: # We have started a traceback.
             frames, offset = [], header
@@ -88,6 +89,18 @@ def parse_tracebacks(reader):
                 frames.append(frame)
             elif err_line:
                 if frames:
+                    # Time to catch some false positive edge cases.
+                    try:
+                        peek = next(reader) # Peek at the next line
+                        reader = (b for a in ([peek], reader) for b in a)
+                        peek_err = reg_err.match(peek[offset:])
+                        if peek_err and peek_err.group("error") == "NameError": # False positive!
+                            continue
+                        if reg_file.match(peek[offset:]): # If next line includes File format, we're still going.
+                            continue
+                    except StopIteration:
+                        pass
+
                     tb = [] # Format traceback
                     for frame in reversed(frames):
                         tb.append(mock(
