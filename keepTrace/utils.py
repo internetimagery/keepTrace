@@ -52,13 +52,15 @@ def parse_tracebacks(reader):
     reg_file = re.compile(r"(  )?File \"(?P<filename>[^\"]+)\", line (?P<lineno>\d+)(, in (?P<name>.+))?")
     reg_err = re.compile(r"(?P<error>[<>\w\.]+)(: (?P<value>.+))?$")
     reg_repeat = re.compile(r"(  )?\[Previous line repeated (?P<repeats>\d+) more times\]")
-    # TODO: support recursion error traceback python3
+
+    peek_errors = [k for k,v in builtins.__dict__.items() if BaseException in getattr(v, "__mro__", []) and "Warning" not in k]
+
     frames = offset = syntax_pack = None # Special treatment for syntax errors
     while True: # Allow modification of reader on the fly. Regular "for var in reader" doesn't allow that.
         line = next(reader)
         header = line.find("Traceback (most recent call last):")
         if header != -1: # We have started a traceback.
-            frames, offset = [], header
+            frames, offset, syntax_pack = [], header, None
         elif frames is not None: # We are currently handling a traceback
             line = line[offset:] # Keep all lines at the same indent
             err_line = reg_err.match(line)
@@ -107,7 +109,7 @@ def parse_tracebacks(reader):
                         peek = next(reader) # Peek at the next line
                         reader = (b for a in ([peek], reader) for b in a)
                         peek_err = reg_err.match(peek[offset:])
-                        if peek_err and peek_err.group("error") in builtins.__dict__: # One liner errors have to be builtins
+                        if peek_err and peek_err.group("error") in peek_errors: # One liner errors have to be builtins
                             continue
                         if reg_file.match(peek[offset:]): # If next line includes File format, we're still going.
                             continue
