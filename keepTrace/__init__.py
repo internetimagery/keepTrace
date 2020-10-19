@@ -164,8 +164,11 @@ class _Cleaner(object):
 
         try:
             obj_type = type(obj)
-            if depth == -1: # We have reached our limit. Just make a basic representation
-                self.seen[obj_id] = result = repr(obj)
+            if depth == -1:
+                # We have reached our limit. Just make a basic representation.
+                # Don't store that we have seen this object however, as we may come across it again
+                # at a lesser depth.
+                result = repr(obj)
             elif obj_type in TRACEBACK_TYPES:
                 result = self.clean_traceback_types(obj, depth)
             elif self.pickler:
